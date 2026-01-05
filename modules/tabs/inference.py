@@ -11,12 +11,18 @@ from modules.ui import Tab
 def inference_options_ui(show_out_dir=True):
     with gr.Row(equal_height=False):
         with gr.Column():
-            source_audio = gr.Textbox(label="Source Audio")
+            # 原有文本输入路径
+            source_audio = gr.Textbox(
+                label="Source Audio",
+                placeholder="Path / wildcard / directory",
+            )
+
             out_dir = gr.Textbox(
                 label="Out folder",
                 visible=show_out_dir,
                 placeholder=models.AUDIO_OUT_DIR,
             )
+
         with gr.Column():
             transpose = gr.Slider(
                 minimum=-20, maximum=20, value=0, step=1, label="Transpose"
@@ -36,6 +42,7 @@ def inference_options_ui(show_out_dir=True):
                 value="auto",
                 label="Embedder Output Layer",
             )
+
         with gr.Column():
             auto_load_index = gr.Checkbox(value=False, label="Auto Load Index")
             faiss_index_file = gr.Textbox(value="", label="Faiss Index File Path")
@@ -46,11 +53,20 @@ def inference_options_ui(show_out_dir=True):
                 step=0.01,
                 label="Retrieval Feature Ratio",
             )
+
         with gr.Column():
+            # 原有 F0 Curve 文件上传
             fo_curve_file = gr.File(label="F0 Curve File")
+
+            # 新增 Source Audio 文件上传
+            source_audio_file = gr.File(
+                label="Upload Source Audio (override)",
+                file_types=[".wav", ".mp3", ".flac"],
+            )
 
     return (
         source_audio,
+        source_audio_file,
         out_dir,
         transpose,
         embedding_model,
@@ -73,7 +89,8 @@ class Inference(Tab):
     def ui(self, outlet):
         def infer(
             sid,
-            input_audio,
+            source_audio,
+            source_audio_file,
             out_dir,
             embedder_model,
             embedding_output_layer,
@@ -87,23 +104,35 @@ class Inference(Tab):
             model = models.vc_model
             try:
                 yield "Infering...", None
+
                 if out_dir == "":
                     out_dir = models.AUDIO_OUT_DIR
 
+                # 优先使用上传文件
+                if source_audio_file is not None:
+                    if isinstance(source_audio_file, dict) and "name" in source_audio_file:
+                        input_audio = source_audio_file["name"]
+                    else:
+                        input_audio = source_audio_file
+                else:
+                    input_audio = source_audio
+
+                if not input_audio:
+                    raise ValueError("No source audio provided")
+
+                # 保留原有逻辑
                 if "*" in input_audio:
-                    assert (
-                        out_dir is not None
-                    ), "Out folder is required for batch processing"
+                    assert out_dir is not None, "Out folder is required for batch processing"
                     files = glob.glob(input_audio, recursive=True)
                 elif os.path.isdir(input_audio):
-                    assert (
-                        out_dir is not None
-                    ), "Out folder is required for batch processing"
+                    assert out_dir is not None, "Out folder is required for batch processing"
                     files = glob.glob(
                         os.path.join(input_audio, "**", "*.wav"), recursive=True
                     )
                 else:
                     files = [input_audio]
+
+                audio = None
                 for file in files:
                     audio = model.single(
                         sid,
@@ -118,9 +147,11 @@ class Inference(Tab):
                         index_rate,
                         output_dir=out_dir,
                     )
+
                 yield "Success", (model.tgt_sr, audio) if len(files) == 1 else None
-            except:
-                yield "Error: " + traceback.format_exc(), None
+
+            except Exception:
+                yield "Error:\n" + traceback.format_exc(), None
 
         with gr.Group():
             with gr.Box():
@@ -129,6 +160,7 @@ class Inference(Tab):
 
                     (
                         source_audio,
+                        source_audio_file,
                         out_dir,
                         transpose,
                         embedder_model,
@@ -153,6 +185,7 @@ class Inference(Tab):
             inputs=[
                 speaker_id,
                 source_audio,
+                source_audio_file,
                 out_dir,
                 embedder_model,
                 embedding_output_layer,
@@ -166,3 +199,5 @@ class Inference(Tab):
             outputs=[status, output],
             queue=True,
         )
+
+        return outlet()
