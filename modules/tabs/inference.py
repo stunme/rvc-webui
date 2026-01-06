@@ -76,4 +76,132 @@ def inference_options_ui(show_out_dir=True):
         pitch_extraction_algo,
         auto_load_index,
         faiss_index_file,
-        retrieval_feature_ratio
+        retrieval_feature_ratio,
+        fo_curve_file,
+        source_audio_file,  # 作为 infer 的额外输入
+    )
+
+
+class Inference(Tab):
+    def title(self):
+        return "Inference"
+
+    def sort(self):
+        return 1
+
+    def ui(self, outlet):
+        def infer(
+            sid,
+            source_audio_text,
+            out_dir,
+            embedder_model,
+            embedding_output_layer,
+            f0_up_key,
+            f0_file,
+            f0_method,
+            auto_load_index,
+            faiss_index_file,
+            index_rate,
+            source_audio_file=None,
+        ):
+            model = models.vc_model
+            try:
+                yield "Infering...", None
+
+                if out_dir == "":
+                    out_dir = models.AUDIO_OUT_DIR
+
+                # 上传文件存在则覆盖文本框路径
+                if source_audio_file and source_audio_file != "":
+                    if isinstance(source_audio_file, dict) and "name" in source_audio_file:
+                        input_audio = source_audio_file["name"]
+                    else:
+                        input_audio = source_audio_file
+                else:
+                    input_audio = source_audio_text
+
+                if not input_audio:
+                    raise ValueError("No source audio provided")
+
+                # 批量 / 文件夹 / 单文件逻辑
+                if "*" in input_audio:
+                    assert out_dir is not None, "Out folder is required for batch processing"
+                    files = glob.glob(input_audio, recursive=True)
+                elif os.path.isdir(input_audio):
+                    assert out_dir is not None, "Out folder is required for batch processing"
+                    files = glob.glob(
+                        os.path.join(input_audio, "**", "*.wav"), recursive=True
+                    )
+                else:
+                    files = [input_audio]
+
+                audio = None
+                for file in files:
+                    audio = model.single(
+                        sid,
+                        file,
+                        embedder_model,
+                        embedding_output_layer,
+                        f0_up_key,
+                        f0_file,
+                        f0_method,
+                        auto_load_index,
+                        faiss_index_file,
+                        index_rate,
+                        output_dir=out_dir,
+                    )
+
+                yield "Success", (model.tgt_sr, audio) if len(files) == 1 else None
+
+            except Exception:
+                yield "Error:\n" + traceback.format_exc(), None
+
+        with gr.Group():
+            with gr.Box():
+                with gr.Column():
+                    _, speaker_id = ui.create_model_list_ui()
+
+                    (
+                        source_audio_text,
+                        out_dir,
+                        transpose,
+                        embedder_model,
+                        embedding_output_layer,
+                        pitch_extraction_algo,
+                        auto_load_index,
+                        faiss_index_file,
+                        retrieval_feature_ratio,
+                        f0_curve_file,
+                        source_audio_file,
+                    ) = inference_options_ui()
+
+                    with gr.Row(equal_height=False):
+                        with gr.Column():
+                            status = gr.Textbox(value="", label="Status")
+                            output = gr.Audio(label="Output", interactive=False)
+
+                    with gr.Row():
+                        infer_button = gr.Button("Infer", variant="primary")
+
+        # 点击按钮时传入组件对象
+        infer_button.click(
+            infer,
+            inputs=[
+                speaker_id,
+                source_audio_text,
+                out_dir,
+                embedder_model,
+                embedding_output_layer,
+                transpose,
+                f0_curve_file,
+                pitch_extraction_algo,
+                auto_load_index,
+                faiss_index_file,
+                retrieval_feature_ratio,
+                source_audio_file,
+            ],
+            outputs=[status, output],
+            queue=True,
+        )
+
+        return outlet()
