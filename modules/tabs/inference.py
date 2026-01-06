@@ -59,15 +59,14 @@ def inference_options_ui(show_out_dir=True):
         with gr.Column():
             fo_curve_file = gr.File(label="F0 Curve File")
 
-        # ==== 上传 source_audio 文件 Column ====
+        # ==== 上传 source_audio 文件 Column（内部使用，不返回）====
         with gr.Column():
             source_audio_file = gr.File(
                 label="Upload Source Audio (override)",
                 file_types=[".wav", ".mp3", ".flac"],
             )
 
-    # 返回 10 个值（保持外部解包兼容）
-    # 上传文件控件通过闭包在 infer 内部使用
+    # 返回 **10 个值**，保持外部解包兼容
     return (
         source_audio_text,
         out_dir,
@@ -79,8 +78,7 @@ def inference_options_ui(show_out_dir=True):
         faiss_index_file,
         retrieval_feature_ratio,
         fo_curve_file,
-        source_audio_file,  # 仅内部使用
-    )
+    ), source_audio_file  # 返回控件对象用于内部 infer 使用
 
 
 class Inference(Tab):
@@ -162,7 +160,7 @@ class Inference(Tab):
                 with gr.Column():
                     _, speaker_id = ui.create_model_list_ui()
 
-                    (
+                    (  # 注意这里解包仍是 10 个值
                         source_audio_text,
                         out_dir,
                         transpose,
@@ -173,8 +171,7 @@ class Inference(Tab):
                         faiss_index_file,
                         retrieval_feature_ratio,
                         f0_curve_file,
-                        source_audio_file,
-                    ) = inference_options_ui()
+                    ), source_audio_file = inference_options_ui()
 
                     with gr.Row(equal_height=False):
                         with gr.Column():
@@ -184,7 +181,7 @@ class Inference(Tab):
                     with gr.Row():
                         infer_button = gr.Button("Infer", variant="primary")
 
-        # 点击按钮传入组件对象
+        # 点击按钮时传入组件对象
         infer_button.click(
             infer,
             inputs=[
