@@ -59,15 +59,15 @@ def inference_options_ui(show_out_dir=True):
         with gr.Column():
             fo_curve_file = gr.File(label="F0 Curve File")
 
-        # ==== 上传 source_audio 文件 Column（不会返回给外部解包）====
+        # ==== 上传 source_audio 文件 Column ====
         with gr.Column():
             source_audio_file = gr.File(
                 label="Upload Source Audio (override)",
                 file_types=[".wav", ".mp3", ".flac"],
             )
 
-    # 返回 **10 个值**，保持原来的解包
-    # infer 内部可以通过闭包访问 source_audio_file
+    # 返回 10 个值（保持外部解包兼容）
+    # 上传文件控件通过闭包在 infer 内部使用
     return (
         source_audio_text,
         out_dir,
@@ -79,7 +79,7 @@ def inference_options_ui(show_out_dir=True):
         faiss_index_file,
         retrieval_feature_ratio,
         fo_curve_file,
-        source_audio_file,  # 放最后供内部使用，但外部解包只取前 10 个
+        source_audio_file,  # 仅内部使用
     )
 
 
@@ -184,7 +184,7 @@ class Inference(Tab):
                     with gr.Row():
                         infer_button = gr.Button("Infer", variant="primary")
 
-        # 点击按钮时传入组件对象
+        # 点击按钮传入组件对象
         infer_button.click(
             infer,
             inputs=[
@@ -199,7 +199,7 @@ class Inference(Tab):
                 auto_load_index,
                 faiss_index_file,
                 retrieval_feature_ratio,
-                source_audio_file,  # 内部使用覆盖文本框
+                source_audio_file,  # 内部覆盖文本框
             ],
             outputs=[status, output],
             queue=True,
